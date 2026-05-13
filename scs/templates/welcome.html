@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="{{ current_language }}">
+<head>
+    <title>{{ t("welcome_title") }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="entry-page">
+<div class="entry-shell">
+    <section class="simple-page-card">
+        <form method="post" action="/set_language" class="stack-form">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <label>{{ t("language") }}</label>
+            <select name="language" onchange="this.form.submit()">
+                {% for code, label in available_languages.items() %}
+                <option value="{{ code }}" {% if current_language == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <p class="simple-kicker">Greater Hyderabad Civic Services</p>
+        <h1>{{ t("portal_name") }}</h1>
+        <p class="simple-subtext">{{ t("welcome_subtitle") }}</p>
+
+        <div class="simple-actions">
+            <a href="/login" class="simple-button simple-button-primary">{{ t("login") }}</a>
+            <a href="/register" class="simple-button simple-button-secondary">{{ t("register") }}</a>
+        </div>
+
+        <div class="simple-stats">
+            <div class="simple-stat-card">
+                <span>{{ t("total") }}</span>
+                <strong>{{ snapshot["total_complaints"] or 0 }}</strong>
+            </div>
+            <div class="simple-stat-card">
+                <span>{{ t("open") }}</span>
+                <strong>{{ snapshot["active_cases"] or 0 }}</strong>
+            </div>
+            <div class="simple-stat-card">
+                <span>{{ t("resolved") }}</span>
+                <strong>{{ snapshot["resolved_cases"] or 0 }}</strong>
+            </div>
+        </div>
+    </section>
+</div>
+</body>
+</html>

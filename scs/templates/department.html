@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Department Panel</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="navbar">
+    <h1>Department Complaint Panel</h1>
+    <div>
+        <a href="/logout">Logout</a>
+    </div>
+</div>
+
+<div class="container">
+    <h2>Assigned Complaints</h2>
+    <p class="subtext">Logged in as Level {{ department_level }} for {{ session.get("department") }}. Update only the complaints assigned to this stage and upload level-wise proof photos.</p>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-label">Active</span>
+            <strong>{{ summary["active_count"] or 0 }}</strong>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Urgent</span>
+            <strong>{{ summary["urgent_count"] or 0 }}</strong>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Overdue</span>
+            <strong>{{ summary["overdue_count"] or 0 }}</strong>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="alert error">{{ error }}</div>
+    {% endif %}
+
+    {% if data|length == 0 %}
+    <p class="subtext">No complaints are currently assigned to Level {{ department_level }} in this department.</p>
+    {% endif %}
+
+    <form method="get" class="filter-toolbar">
+        <input type="search" name="q" placeholder="Search ticket, citizen, complaint, area" value="{{ search_term }}">
+        <select name="status">
+            <option value="">All statuses</option>
+            <option value="Pending" {% if status_filter == "Pending" %}selected{% endif %}>Pending</option>
+            <option value="In Progress" {% if status_filter == "In Progress" %}selected{% endif %}>In Progress</option>
+            <option value="Resolved" {% if status_filter == "Resolved" %}selected{% endif %}>Resolved</option>
+            <option value="Closed" {% if status_filter == "Closed" %}selected{% endif %}>Closed</option>
+            <option value="Reopened" {% if status_filter == "Reopened" %}selected{% endif %}>Reopened</option>
+        </select>
+        <button type="submit">Apply</button>
+    </form>
+
+    <div class="detail-card activity-card">
+        <div class="card-head">
+            <h3>Department Activity</h3>
+            <span class="badge neutral-badge">Recent</span>
+        </div>
+        {% if recent_activity %}
+            {% for item in recent_activity %}
+            <div class="timeline-item compact-item">
+                <p><strong>{{ item["ticket_id"] }}</strong> {{ item["message"] }}</p>
+                <span>{{ item["created_at"] }}</span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="subtext">Recent department actions will appear here.</p>
+        {% endif %}
+    </div>
+
+    <div class="table-wrapper">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>User</th>
+                    <th>Complaint</th>
+                    <th>Address</th>
+                    <th>Check</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                    <th>Level</th>
+                    <th>Photos</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data %}
+                <tr>
+                    <td>{{ row["ticket_id"] }}</td>
+                    <td>{{ row["name"] }}</td>
+                    <td>
+                        <strong>{{ row["complaint_type"] or "Others" }}</strong><br>
+                        {{ row["complaint"] }}
+                        {% if row["landmark"] %}
+                        <br><span class="subtext">Landmark: {{ row["landmark"] }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ row["address_colony"] }}, {{ row["address_mandal"] }}, {{ row["address_district"] }} - {{ row["address_pincode"] }}
+                        {% if row["latitude"] and row["longitude"] %}
+                        <br>
+                        <span class="subtext">Coords: {{ row["latitude"] }}, {{ row["longitude"] }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge validation-badge {% if row['address_validation_status'] == 'Verified' %}verified{% elif row['address_validation_status'] == 'Invalid' %}invalid{% else %}review{% endif %}">{{ row["address_validation_status"] or "Needs Review" }}</span>
+                        {% if row["address_validation_reason"] %}
+                        <br><span class="subtext">{{ row["address_validation_reason"] }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row["status"] }}</td>
+                    <td>
+                        <strong>{{ row["severity"] or "Medium" }}</strong><br>
+                        <span class="subtext">{{ row["affected_people"] or 1 }} people</span><br>
+                        <span class="subtext">SLA: {{ row["sla_deadline"] or "-" }}</span>
+                    </td>
+                    <td>{{ row["level"] }}</td>
+                    <td>
+                        {% if row["user_photos"] %}
+                            {% for photo in row["user_photos"].split(',') %}
+                            <a href="/static/uploads/{{ photo }}" target="_blank" class="table-link">Citizen {{ loop.index }}</a><br>
+                            {% endfor %}
+                        {% else %}
+                            No citizen photo<br>
+                        {% endif %}
+                        {% if row["level1_photo"] %}<a href="/static/uploads/{{ row['level1_photo'] }}" target="_blank" class="table-link">Level 1</a><br>{% endif %}
+                        {% if row["level2_photo"] %}<a href="/static/uploads/{{ row['level2_photo'] }}" target="_blank" class="table-link">Level 2</a><br>{% endif %}
+                        {% if row["level3_photo"] %}<a href="/static/uploads/{{ row['level3_photo'] }}" target="_blank" class="table-link">Level 3</a>{% endif %}
+                    </td>
+                    <td>
+                        <div class="action-stack">
+                            <form method="post" action="/update_status" enctype="multipart/form-data" class="mini-form">
+                                <input type="hidden" name="id" value="{{ row['id'] }}">
+                                <select name="status">
+                                    <option value="Pending">Pending</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Resolved">Resolved</option>
+                                    <option value="Closed">Closed</option>
+                                </select>
+                                <input type="text" name="estimated_resolution" placeholder="ETA e.g. Today 6 PM" value="{{ row['estimated_resolution'] or '' }}">
+                                <textarea name="department_note" placeholder="Visible update for the citizen">{{ row["department_note"] or "" }}</textarea>
+                                <input type="file" name="resolution_photo" accept="image/*">
+                                <div class="button-row">
+                                    <button type="submit" class="primary-action-btn">Update Case</button>
+                                </div>
+                            </form>
+
+                            <form method="post" action="/department/remove_complaint" class="mini-form delete-form" onsubmit="return confirm('Remove this complaint from the department queue? This will delete the complaint record.');">
+                                <input type="hidden" name="id" value="{{ row['id'] }}">
+                                <button type="submit" class="danger-btn">Remove Complaint</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+</body>
+</html>

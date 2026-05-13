@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="{{ current_language }}">
+<head>
+    <title>{{ t("track_complaint") }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="navbar">
+    <h1>{{ t("tracking_title") }}</h1>
+    <div>
+        <form method="post" action="/set_language" style="display:inline-block;">
+            <input type="hidden" name="next" value="{{ request.path }}{% if request.args.get('ticket_id') %}?ticket_id={{ request.args.get('ticket_id') }}{% endif %}">
+            <select name="language" onchange="this.form.submit()" aria-label="{{ t('language') }}">
+                {% for code, label in available_languages.items() %}
+                <option value="{{ code }}" {% if current_language == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <a href="/dashboard">{{ t("dashboard") }}</a>
+        <a href="/logout">{{ t("logout") }}</a>
+    </div>
+</div>
+
+<div class="container narrow">
+    <h2>{{ t("track_by_ticket") }}</h2>
+    <form method="post" class="stack-form">
+        <input name="ticket_id" value="{{ complaint['ticket_id'] if complaint else request.args.get('ticket_id', '') }}" placeholder="{{ t('enter_ticket_id') }}" required>
+        <button type="submit">{{ t("track") }}</button>
+    </form>
+
+    {% if error %}
+    <div class="alert error">{{ error }}</div>
+    {% endif %}
+
+    {% if complaint %}
+    <div class="live-meta">
+        <span class="live-dot"></span>
+        <span id="trackSyncStatus">{{ t("auto_refresh") }}</span>
+    </div>
+    <div id="trackScreen" data-ticket-id="{{ complaint['ticket_id'] }}">
+        <div id="complaintSummary">
+        <div class="detail-card">
+            <h3>{{ complaint["ticket_id"] }}</h3>
+            <div class="status-journey">
+                <div class="journey-step {% if complaint['status_step'] >= 1 %}active{% endif %}">{{ t("filed") }}</div>
+                <div class="journey-step {% if complaint['status_step'] >= 2 %}active{% endif %}">{{ t("in_review") }}</div>
+                <div class="journey-step {% if complaint['status_step'] >= 3 %}active{% endif %}">{{ t("resolved") }}</div>
+                <div class="journey-step {% if complaint['status_step'] >= 4 %}active{% endif %}">{{ t("closed") }}</div>
+            </div>
+            <p><strong>{{ t("complaint_type") }}:</strong> {{ complaint["complaint_type"] or "Others" }}</p>
+            <p><strong>{{ t("complaint") }}:</strong> {{ complaint["complaint"] }}</p>
+            <p><strong>Status:</strong> {{ complaint["status"] }}</p>
+            <p><strong>{{ t("department") }}:</strong> {{ complaint["department"] }}</p>
+            <p><strong>{{ t("priority") }}:</strong> {{ complaint["severity"] or "Medium" }}</p>
+            <p><strong>{{ t("level") }}:</strong> {{ complaint["level"] }}</p>
+            {% if complaint["linked_ticket_id"] %}
+            <p><strong>{{ t("linked_main_ticket") }}:</strong> {{ complaint["linked_ticket_id"] }}</p>
+            {% endif %}
+            <p><strong>{{ t("people_affected") }}:</strong> {{ complaint["affected_people"] or 1 }}</p>
+            <p><strong>{{ t("sla") }}:</strong> {{ complaint["sla_deadline"] or "-" }}</p>
+            {% if complaint["estimated_resolution"] %}
+            <p><strong>{{ t("estimated_resolution") }}:</strong> {{ complaint["estimated_resolution"] }}</p>
+            {% endif %}
+            {% if complaint["landmark"] %}
+            <p><strong>{{ t("landmark") }}:</strong> {{ complaint["landmark"] }}</p>
+            {% endif %}
+            <p><strong>{{ t("address") }}:</strong> {{ complaint["address_colony"] }}, {{ complaint["address_mandal"] }}, {{ complaint["address_district"] }} - {{ complaint["address_pincode"] }}</p>
+            <p><strong>{{ t("address_check") }}:</strong> <span class="badge validation-badge {{ complaint['address_validation_class'] }}">{{ complaint["address_validation_status"] }}</span></p>
+            {% if complaint["address_validation_reason"] %}
+            <p class="subtext">{{ complaint["address_validation_reason"] }}</p>
+            {% endif %}
+            {% if complaint["latitude"] and complaint["longitude"] %}
+            <p><strong>{{ t("coordinates") }}:</strong> {{ complaint["latitude"] }}, {{ complaint["longitude"] }}</p>
+            {% endif %}
+            {% if complaint["escalation_message"] %}
+            <p><strong>{{ t("escalation") }}:</strong> {{ complaint["escalation_message"] }}</p>
+            {% endif %}
+            {% if complaint["department_note"] %}
+            <div class="public-note">
+                <strong>{{ t("latest_department_note") }}</strong>
+                <p>{{ complaint["department_note"] }}</p>
+            </div>
+            {% endif %}
+
+            <div class="photo-grid">
+                {% if complaint["user_photos"] %}
+                    {% for photo in complaint["user_photos"] %}
+                    <a href="/static/uploads/{{ photo }}" target="_blank">Citizen Photo {{ loop.index }}</a>
+                    {% endfor %}
+                {% endif %}
+                {% if complaint["level1_photo"] %}
+                <a href="/static/uploads/{{ complaint['level1_photo'] }}" target="_blank">Level 1 Proof</a>
+                {% endif %}
+                {% if complaint["level2_photo"] %}
+                <a href="/static/uploads/{{ complaint['level2_photo'] }}" target="_blank">Level 2 Proof</a>
+                {% endif %}
+                {% if complaint["level3_photo"] %}
+                <a href="/static/uploads/{{ complaint['level3_photo'] }}" target="_blank">Level 3 Proof</a>
+                {% endif %}
+            </div>
+        </div>
+        </div>
+
+        <div class="detail-card timeline-card">
+            <h3>{{ t("complaint_timeline") }}</h3>
+            <div id="complaintTimeline">
+                {% if history %}
+                    {% for item in history %}
+                    <div class="timeline-item">
+                        <strong>{{ item["event_type"]|capitalize }}</strong>
+                        <p>{{ item["message"] }}</p>
+                        <span>{{ item["created_at"] }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="subtext">{{ t("timeline_empty") }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if complaint["status"] in ["Resolved", "Closed", "Reopened"] %}
+        <div class="detail-card" id="feedbackPanel">
+            <h3>{{ t("citizen_feedback") }}</h3>
+            {% if complaint["feedback_rating"] %}
+            <p><strong>{{ t("saved_rating") }}:</strong> {{ complaint["feedback_rating"] }}/5</p>
+            {% endif %}
+            {% if complaint["feedback_comment"] %}
+            <p><strong>{{ t("saved_comment") }}:</strong> {{ complaint["feedback_comment"] }}</p>
+            {% endif %}
+
+            <form method="post" action="/submit_feedback" class="stack-form">
+                <input type="hidden" name="id" value="{{ complaint['id'] }}">
+                <input type="hidden" name="action" value="feedback">
+                <label>{{ t("rate_resolution") }}</label>
+                <select name="feedback_rating">
+                    <option value="">{{ t("choose_rating") }}</option>
+                    <option value="5">5 - fully resolved</option>
+                    <option value="4">4 - mostly resolved</option>
+                    <option value="3">3 - acceptable</option>
+                    <option value="2">2 - not satisfactory</option>
+                    <option value="1">1 - unresolved</option>
+                </select>
+                <label>{{ t("feedback_comment") }}</label>
+                <textarea name="feedback_comment" placeholder="{{ t('feedback_placeholder') }}"></textarea>
+                <button type="submit">{{ t("save_feedback") }}</button>
+            </form>
+
+            {% if complaint["status"] in ["Resolved", "Closed"] and (complaint["reopened_count"] or 0) < 1 %}
+            <form method="post" action="/submit_feedback" class="stack-form inline-gap">
+                <input type="hidden" name="id" value="{{ complaint['id'] }}">
+                <input type="hidden" name="action" value="reopen">
+                <label>{{ t("still_facing_issue") }}</label>
+                <textarea name="feedback_comment" placeholder="{{ t('reopen_placeholder') }}"></textarea>
+                <button type="submit" class="secondary-btn">{{ t("reopen_complaint") }}</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+const i18n = {{ ui_text|tojson }};
+
+function tr(key) {
+    return i18n[key] || key;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, function(char) {
+        const entities = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            "\"": "&quot;",
+            "'": "&#39;"
+        };
+        return entities[char];
+    });
+}
+
+function photoLinks(complaint) {
+    const links = [];
+    (complaint.user_photos || []).forEach(function(photo, index) {
+        links.push(`<a href="/static/uploads/${encodeURIComponent(photo)}" target="_blank">Citizen Photo ${index + 1}</a>`);
+    });
+    if (complaint.level1_photo) {
+        links.push(`<a href="/static/uploads/${encodeURIComponent(complaint.level1_photo)}" target="_blank">Level 1 Proof</a>`);
+    }
+    if (complaint.level2_photo) {
+        links.push(`<a href="/static/uploads/${encodeURIComponent(complaint.level2_photo)}" target="_blank">Level 2 Proof</a>`);
+    }
+    if (complaint.level3_photo) {
+        links.push(`<a href="/static/uploads/${encodeURIComponent(complaint.level3_photo)}" target="_blank">Level 3 Proof</a>`);
+    }
+    return links.join("");
+}
+
+function renderFeedbackPanel(complaint) {
+    const savedRating = complaint.feedback_rating
+        ? `<p><strong>${escapeHtml(tr("saved_rating"))}:</strong> ${escapeHtml(complaint.feedback_rating)}/5</p>`
+        : "";
+    const savedComment = complaint.feedback_comment
+        ? `<p><strong>${escapeHtml(tr("saved_comment"))}:</strong> ${escapeHtml(complaint.feedback_comment)}</p>`
+        : "";
+    const reopenForm = (complaint.status === "Resolved" || complaint.status === "Closed") && (complaint.reopened_count || 0) < 1
+        ? `
+            <form method="post" action="/submit_feedback" class="stack-form inline-gap">
+                <input type="hidden" name="id" value="${escapeHtml(complaint.id)}">
+                <input type="hidden" name="action" value="reopen">
+                <label>${escapeHtml(tr("still_facing_issue"))}</label>
+                <textarea name="feedback_comment" placeholder="${escapeHtml(tr("reopen_placeholder"))}"></textarea>
+                <button type="submit" class="secondary-btn">${escapeHtml(tr("reopen_complaint"))}</button>
+            </form>
+        `
+        : "";
+
+    if (!["Resolved", "Closed", "Reopened"].includes(complaint.status)) {
+        return "";
+    }
+
+    return `
+        <div class="detail-card" id="feedbackPanel">
+            <h3>${escapeHtml(tr("citizen_feedback"))}</h3>
+            ${savedRating}
+            ${savedComment}
+            <form method="post" action="/submit_feedback" class="stack-form">
+                <input type="hidden" name="id" value="${escapeHtml(complaint.id)}">
+                <input type="hidden" name="action" value="feedback">
+                <label>${escapeHtml(tr("rate_resolution"))}</label>
+                <select name="feedback_rating">
+                    <option value="">${escapeHtml(tr("choose_rating"))}</option>
+                    <option value="5">5 - fully resolved</option>
+                    <option value="4">4 - mostly resolved</option>
+                    <option value="3">3 - acceptable</option>
+                    <option value="2">2 - not satisfactory</option>
+                    <option value="1">1 - unresolved</option>
+                </select>
+                <label>${escapeHtml(tr("feedback_comment"))}</label>
+                <textarea name="feedback_comment" placeholder="${escapeHtml(tr("feedback_placeholder"))}"></textarea>
+                <button type="submit">${escapeHtml(tr("save_feedback"))}</button>
+            </form>
+            ${reopenForm}
+        </div>
+    `;
+}
+
+function renderComplaintDetail(complaint) {
+    const escalation = complaint.escalation_message
+        ? `<p><strong>${escapeHtml(tr("escalation"))}:</strong> ${escapeHtml(complaint.escalation_message)}</p>`
+        : "";
+    const statusStep = complaint.status_step || 1;
+
+    return `
+        <div class="detail-card">
+            <h3>${escapeHtml(complaint.ticket_id)}</h3>
+            <div class="status-journey">
+                <div class="journey-step ${statusStep >= 1 ? 'active' : ''}">${escapeHtml(tr("filed"))}</div>
+                <div class="journey-step ${statusStep >= 2 ? 'active' : ''}">${escapeHtml(tr("in_review"))}</div>
+                <div class="journey-step ${statusStep >= 3 ? 'active' : ''}">${escapeHtml(tr("resolved"))}</div>
+                <div class="journey-step ${statusStep >= 4 ? 'active' : ''}">${escapeHtml(tr("closed"))}</div>
+            </div>
+            <p><strong>${escapeHtml(tr("complaint_type"))}:</strong> ${escapeHtml(complaint.complaint_type)}</p>
+            <p><strong>${escapeHtml(tr("complaint"))}:</strong> ${escapeHtml(complaint.complaint)}</p>
+            <p><strong>Status:</strong> ${escapeHtml(complaint.status)}</p>
+            <p><strong>${escapeHtml(tr("department"))}:</strong> ${escapeHtml(complaint.department)}</p>
+            <p><strong>${escapeHtml(tr("priority"))}:</strong> ${escapeHtml(complaint.severity || "Medium")}</p>
+            <p><strong>${escapeHtml(tr("level"))}:</strong> ${escapeHtml(complaint.level)}</p>
+            ${complaint.linked_ticket_id ? `<p><strong>${escapeHtml(tr("linked_main_ticket"))}:</strong> ${escapeHtml(complaint.linked_ticket_id)}</p>` : ""}
+            <p><strong>${escapeHtml(tr("people_affected"))}:</strong> ${escapeHtml(complaint.affected_people || 1)}</p>
+            <p><strong>${escapeHtml(tr("sla"))}:</strong> ${escapeHtml(complaint.sla_deadline || "-")} ${complaint.sla_label ? `(${escapeHtml(complaint.sla_label)})` : ""}</p>
+            ${complaint.estimated_resolution ? `<p><strong>${escapeHtml(tr("estimated_resolution"))}:</strong> ${escapeHtml(complaint.estimated_resolution)}</p>` : ""}
+            ${complaint.landmark ? `<p><strong>${escapeHtml(tr("landmark"))}:</strong> ${escapeHtml(complaint.landmark)}</p>` : ""}
+            <p><strong>${escapeHtml(tr("address"))}:</strong> ${escapeHtml(complaint.address_colony)}, ${escapeHtml(complaint.address_mandal)}, ${escapeHtml(complaint.address_district)} - ${escapeHtml(complaint.address_pincode)}</p>
+            <p><strong>${escapeHtml(tr("address_check"))}:</strong> <span class="badge validation-badge ${escapeHtml(complaint.address_validation_class || "review")}">${escapeHtml(complaint.address_validation_status || "Needs Review")}</span></p>
+            ${complaint.address_validation_reason ? `<p class="subtext">${escapeHtml(complaint.address_validation_reason)}</p>` : ""}
+            ${complaint.latitude && complaint.longitude ? `<p><strong>${escapeHtml(tr("coordinates"))}:</strong> ${escapeHtml(complaint.latitude)}, ${escapeHtml(complaint.longitude)}</p>` : ""}
+            ${escalation}
+            ${complaint.department_note ? `<div class="public-note"><strong>${escapeHtml(tr("latest_department_note"))}</strong><p>${escapeHtml(complaint.department_note)}</p></div>` : ""}
+            <div class="photo-grid">${photoLinks(complaint)}</div>
+        </div>
+    `;
+}
+
+function renderTimeline(history) {
+    if (!history || history.length === 0) {
+        return `<p class="subtext">${escapeHtml(tr("timeline_empty"))}</p>`;
+    }
+
+    return history.map(function(item) {
+        return `
+            <div class="timeline-item">
+                <strong>${escapeHtml(item.event_type)}</strong>
+                <p>${escapeHtml(item.message)}</p>
+                <span>${escapeHtml(item.created_at)}</span>
+            </div>
+        `;
+    }).join("");
+}
+
+async function refreshTrackedComplaint() {
+    const screen = document.getElementById("trackScreen");
+    if (!screen) {
+        return;
+    }
+
+    const ticketId = screen.dataset.ticketId;
+    const syncStatus = document.getElementById("trackSyncStatus");
+
+    try {
+        const response = await fetch(`/api/complaint/${encodeURIComponent(ticketId)}`, {
+            headers: { "X-Requested-With": "fetch" }
+        });
+        if (!response.ok) {
+            throw new Error("Request failed");
+        }
+
+        const data = await response.json();
+        const complaintSummary = document.getElementById("complaintSummary");
+        if (complaintSummary) {
+            complaintSummary.innerHTML = renderComplaintDetail(data.complaint);
+        }
+        const timeline = document.getElementById("complaintTimeline");
+        if (timeline) {
+            timeline.innerHTML = renderTimeline(data.history || []);
+        }
+        const feedbackPanel = document.getElementById("feedbackPanel");
+        if (feedbackPanel || ["Resolved", "Closed", "Reopened"].includes(data.complaint.status)) {
+            const markup = renderFeedbackPanel(data.complaint);
+            if (feedbackPanel) {
+                feedbackPanel.outerHTML = markup || '<div id="feedbackPanel"></div>';
+            } else if (markup) {
+                screen.insertAdjacentHTML("beforeend", markup);
+            }
+        }
+        syncStatus.textContent = `${tr("last_updated_at")} ${new Date().toLocaleTimeString()}`;
+    } catch (error) {
+        syncStatus.textContent = tr("tracking_retry");
+    }
+}
+
+setInterval(refreshTrackedComplaint, 10000);
+</script>
+</body>
+</html>
